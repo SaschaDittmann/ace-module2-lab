@@ -101,15 +101,33 @@ router.post('/', (req: Request<Record<string, unknown>, Record<string, unknown>,
       }
 
       if (req.body.layout) {
-        const filePath: string = path.resolve(req.body.layout).toLowerCase()
-        const isForbiddenFile: boolean = (filePath.includes('ftp') || filePath.includes('ctf.key') || filePath.includes('encryptionkeys'))
-        if (!isForbiddenFile) {
+        if (typeof req.body.layout !== 'string') {
+          next(new Error('File access not allowed'))
+          return
+        }
+        const rootPath: string = path.resolve('.')
+        const viewsPath: string = path.resolve(req.app.get('views') ?? 'views')
+        const resolvedPath: string = path.resolve(viewsPath, req.body.layout)
+        const relPath: string = path.relative(rootPath, resolvedPath)
+        const isWithinRoot: boolean = !relPath.startsWith('..') && !path.isAbsolute(relPath) && resolvedPath.startsWith(rootPath + path.sep)
+        const filePath: string = resolvedPath.toLowerCase()
+        const directPath: string = path.resolve(req.body.layout).toLowerCase()
+        const isForbiddenFile: boolean = (
+          filePath.includes('ftp') ||
+          filePath.includes('ctf.key') ||
+          filePath.includes('encryptionkeys') ||
+          directPath.includes('ftp') ||
+          directPath.includes('ctf.key') ||
+          directPath.includes('encryptionkeys') ||
+          req.body.layout.includes('\0')
+        )
+        if (!isForbiddenFile && isWithinRoot) {
           res.render('dataErasureResult', {
             ...req.body,
             ...themeVars
           }, (error, html) => {
             if (!html || error) {
-              next(new Error(error.message))
+              next(new Error(error?.message ?? 'Render failed'))
             } else {
               const sendlfrResponse: string = html.slice(0, 100) + '......'
               res.send(sendlfrResponse)
